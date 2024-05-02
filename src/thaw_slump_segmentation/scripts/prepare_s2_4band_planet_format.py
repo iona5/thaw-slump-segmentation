@@ -191,7 +191,7 @@ def main():
     input_dir = Path(args.data_dir)
     infiles = list(input_dir.glob(args.image_regex))
     
-    base_dir = Path('/isipd/projects/p_aicore_pf/initze/processing/auxiliary/')
+    base_dir = args.aux_dir
     # make absolute paths
     elevation = base_dir / 'elevation.vrt'
     slope = base_dir / 'slope.vrt'
