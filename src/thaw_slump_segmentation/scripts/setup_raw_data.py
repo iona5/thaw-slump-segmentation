@@ -43,7 +43,26 @@ STATUS = {0: 'failed', 1: 'success', 2: 'skipped'}
 SUCCESS_STATES = ['rename', 'label', 'ndvi', 'tcvis', 'rel_dem', 'slope', 'mask', 'move']
 
 
-def preprocess_directory(image_dir, data_dir, aux_dir, backup_dir, log_path, gdal_bin, gdal_path, label_required=True):
+preprocess_app = typer.Typer()
+
+@preprocess_app.command()
+def preprocess_directory(
+    image_dir  : Annotated[Path, typer.Option('--image_dir', help='The directory where SR and optionally the mask reside')], 
+    data_dir   : Annotated[Path, typer.Option('--data_dir', help='The directory where to write the masked image to if it exists')], 
+    aux_dir    : Annotated[Path, typer.Option('--aux_dir', help='The directory where aux data, specifically the ArcticDEM virtual raster files reside')], 
+    backup_dir : Annotated[Path, typer.Option('--backup_dir', help='output directory')], 
+    log_path   : Annotated[str, typer.Option('--log_path', help='Logging path')], 
+    gdal_bin   : Annotated[str, typer.Option('--gdal_bin', 
+                                                    help='Path to GDAL binaries (like gdalwarp)',
+                                                    envvar='GDAL_BIN')], 
+    gdal_path  : Annotated[str, typer.Option('--gdal_path',
+                                                    help='Path to GDAL scripts (like gdal_retile.py)',
+                                                    envvar="GDAL_PATH")] 
+                                                    = None, 
+    label_required: Annotated[bool, typer.Option('--label_required/--no_labels', 
+                    help='if labels should be searched for and baked into tiles (only needed for training)')] 
+                    = True
+    ):
     # Mock old args object
     gdal.initialize(bin=gdal_bin, path=gdal_path)
 
