@@ -43,7 +43,12 @@ def run_inference(
     else:
         # CUDA_VISIBLE_DEVICES (see https://developer.nvidia.com/blog/cuda-pro-tip-control-gpu-visibility-cuda_visible_devices/)
         # comma-separated list of device IDs 
-        os.environ["CUDA_VISIBLE_DEVICES"]=str(gpu)
+        try:
+            gpu_csv = ",".join(gpu)
+        except TypeError:
+            gpu_csv = gpu
+        os.environ["CUDA_VISIBLE_DEVICES"]=str(gpu_csv)
+        print(f" run_inference with GPU {gpu_csv}")
         inference(
             name=model,
             data_dir=processing_dir, inference_dir=inference_dir, 
