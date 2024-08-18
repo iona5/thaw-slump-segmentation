@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-import os, warnings, subprocess
+import os, warnings, subprocess, random
 
 def pytest_addoption(parser):
     # adds a test parameter --data-dir to pass a directory where predefined testfiles reside
@@ -31,6 +31,14 @@ def pytest_addoption(parser):
         action="store",
         default=None,
         help='path to data of the proj library, will be set as PROJ_DATA environment variable'
+    )
+
+    # GPU
+    parser.addoption(
+        "--gpu_id",
+        action="store",
+        default=None,
+        help='which gpu to run the cuda processes, will pick a random ID between 0-7 by default'
     )
      
 
@@ -120,5 +128,15 @@ def gdal_path(request, proj_data):
             pytest.skip( f"--gdal_path is required to point to the folder of the gdal python scripts (e.g. gdal_merge.py) " )
 
     return gdal_path
+
+@pytest.fixture()
+def gpu_id(request):
+    requested_gpu_id = request.config.getoption("--gpu_id")
+    selected_gpu_id = requested_gpu_id if requested_gpu_id is not None else random.randint(0,7)
+
+    print(f"selecting GPU {selected_gpu_id}")
+
+    return selected_gpu_id
+        
 
 
