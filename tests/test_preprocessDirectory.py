@@ -10,7 +10,7 @@ test_subfolders = [
 ]
 
 @pytest.mark.parametrize("subfolder", test_subfolders)
-def testProcessCompleteScene(data_dir:Path, subfolder, gdal_bin, gdal_path):
+def testProcessCompleteScene(data_dir:Path, subfolder, gdal_bin, gdal_path, tmp_path):
 
     # check if data_dir this is just a basic image folder formatted from planet download
 
@@ -19,18 +19,15 @@ def testProcessCompleteScene(data_dir:Path, subfolder, gdal_bin, gdal_path):
     if not image_dir.exists():
         pytest.skip(f"could not find predefined image dir {image_dir}")
 
-    # create a working directory and copy images there
-    temp_path = Path(tempfile.mkdtemp())
-
-    source_dir = temp_path / "input"
+    source_dir = tmp_path / "input"
     source_dir.mkdir()
     [shutil.copy(f, source_dir) for f in image_dir.glob("*")]
 
     # target directory of the preprocess_directory processing
-    target_dir = temp_path / "output"
+    target_dir = tmp_path / "output"
     target_dir.mkdir()
 
-    backup_dir = temp_path / "backup"
+    backup_dir = tmp_path / "backup"
     backup_dir.mkdir()
 
     preprocess_result = preprocess_directory(
@@ -38,7 +35,7 @@ def testProcessCompleteScene(data_dir:Path, subfolder, gdal_bin, gdal_path):
         data_dir=target_dir, 
         aux_dir=aux_dir,
         backup_dir=backup_dir,
-        log_path=temp_path / "preprocess.log",
+        log_path=tmp_path / "preprocess.log",
         gdal_bin=gdal_bin, gdal_path=gdal_path, label_required=False
         )
 
@@ -56,6 +53,4 @@ def testProcessCompleteScene(data_dir:Path, subfolder, gdal_bin, gdal_path):
         assert testfile.exists()
         assert testfile.stat().st_size > 0
 
-
-    shutil.rmtree(temp_path)
 
