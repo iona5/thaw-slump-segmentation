@@ -1,4 +1,4 @@
-import shutil, pytest
+import shutil, pytest, os
 from pathlib import Path
 
 from thaw_slump_segmentation.scripts import inference
@@ -54,5 +54,35 @@ def testInferencePlanetTile(data_dir, tmp_path:Path, gdal_bin, gdal_path, planet
 
     assert files == expected_inference_files
 
+def testInferenceSentinelClipped(data_dir, tmp_path:Path, gdal_bin, gdal_path, gpu_id):
 
+    effective_id = "1072116_20230807T202851_20230807T203151_T10WEE"
+
+    target_dir = tmp_path / "intermediate"
+    input_dir = target_dir / "tiles"
+    input_dir.mkdir(parents=True)
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+
+    shutil.copytree(data_dir / "intermediate/s2_tiles/1072116/20230807T202851_20230807T203151_T10WEE", input_dir / effective_id)
+    os.environ["CUDA_VISIBLE_DEVICES"]=str(gpu_id)
+
+    inference.inference(
+        name = False, # just write folder to output_dir
+        model_path = data_dir / "models/V0Sentinel2nativeTCVIS_2024-06-18_15-19-41",
+        tile_to_predict=[effective_id], # has to be a list
+        gdal_path=gdal_path, gdal_bin=gdal_bin,
+        n_jobs=1, data_dir=target_dir,
+        log_dir=log_dir, 
+        inference_dir=output_dir
+    )
+
+    assert (output_dir / effective_id ).exists()
+
+    # check if all of the expected files are there (and only those)
+    files = set( [f.name for f in (output_dir / effective_id ).iterdir()]  )
+
+    assert files == expected_inference_files
 
