@@ -32,6 +32,8 @@ from thaw_slump_segmentation.scripts.setup_raw_data import preprocess_directory
 from thaw_slump_segmentation.utils import get_logger, init_logging, log_run
 from thaw_slump_segmentation.utils.plot_info import flatui_cmap
 
+from awi_rs_datatools import datafolders
+
 cmap_prob = flatui_cmap('Midnight Blue', 'Alizarin')
 cmap_dem = flatui_cmap('Alizarin', 'Clouds', 'Peter River')
 cmap_slope = flatui_cmap('Clouds', 'Midnight Blue')
@@ -124,7 +126,8 @@ def load_model_from_path(model_path, logger=None, ckpt="latest"):
     return model, sources, dev
 
 def do_inference(
-    tilename, sources:DataSources, model:torch.nn.Module, dev, logger, name, data_dir:Path, inference_dir, patch_size, margin_size, log_path=None
+    tilename, sources:DataSources, model:torch.nn.Module, dev, logger, name, data_dir:Path, inference_dir, patch_size, margin_size, log_path=None,
+    assume_classic_file_tree = True
 ):
     """A wrapper around the actual inference, primarily aimed for a PLANET data setup.
 
@@ -140,29 +143,42 @@ def do_inference(
         patch_size (int): the size of the subtile to predict over
         margin_size (int): how many pixel overlap the tiles are supposed to have
         log_path (Path, optional): in case of preprocessing, log to this file for that stage. Defaults to None.
+        assume_classic_file_tree (bool, optional): If you want to use the new dataset discovery, set this to False.
     """
 
     # ===== PREPARE THE DATA =====
     DATA_ROOT = data_dir
     INFERENCE_ROOT = inference_dir
-    data_directory = DATA_ROOT / 'tiles' / tilename
-    if not data_directory.exists():
-        logger.info(f'Preprocessing directory {tilename}')
-        raw_directory = DATA_ROOT / 'input' / tilename
-        if not raw_directory.exists():
-            logger.error(
-                f"Couldn't find tile '{tilename}' in {DATA_ROOT}/tiles or {DATA_ROOT}/input. Skipping this tile"
-            )
-            return
-        # TODO: The arguments don't match the function signature -> Invest how to resolve
-        preprocess_directory(raw_directory, log_path, label_required=False)
-        # After this, data_directory should contain all the stuff that we need.
+    if assume_classic_file_tree:
+        data_directory = DATA_ROOT / 'tiles' / tilename
+        if not data_directory.exists():
+            logger.info(f'Preprocessing directory {tilename}')
+            raw_directory = DATA_ROOT / 'input' / tilename
+            if not raw_directory.exists():
+                logger.error(
+                    f"Couldn't find tile '{tilename}' in {DATA_ROOT}/tiles or {DATA_ROOT}/input. Skipping this tile"
+                )
+                return
+            # TODO: The arguments don't match the function signature -> Invest how to resolve
+            preprocess_directory(raw_directory, log_path, label_required=False)
+            # After this, data_directory should contain all the stuff that we need.
 
-    if name:
-        output_directory = INFERENCE_ROOT / name / tilename
+            if name:
+                output_directory = INFERENCE_ROOT / name / tilename
+            else:
+                output_directory = INFERENCE_ROOT / tilename
+
     else:
-        output_directory = INFERENCE_ROOT / tilename
+        # we want to find a `DataFolder` in data_dir with `tilename` as the ID
+        dtafd = datafolders.findByIds(data_dir, tilename)
+        try:
+            dtafolder = next(iter(dtafd.values()))
+        except StopIteration:
+            logger.error("no data folders found")
+            return
 
+        data_directory = dtafolder.path
+        output_directory = INFERENCE_ROOT / dtafolder.id()
 
     tile_logger = get_logger(f'inference.{tilename}')
 
@@ -374,6 +390,7 @@ def inference(
     ),
     margin_size: Annotated[int, typer.Option('--margin_size', '-n', help='Size of patch overlap')] = 256,
     patch_size: Annotated[int, typer.Option('--patch_size', '-p', help='Size of patches')] = 1024,
+    default_file_discovery: Annotated[bool, typer.Option('--default_files', help='use the standard file discovery algorithm')] = True
 ):
     """Inference Script"""
 
@@ -403,7 +420,8 @@ def inference(
 
     for tilename in tqdm(tile_to_predict):
         do_inference(
-            tilename, sources, model, dev, logger, name, data_dir, inference_dir, patch_size, margin_size, log_path
+            tilename, sources, model, dev, logger, name, data_dir, inference_dir, patch_size, margin_size, log_path,
+            assume_classic_file_tree=default_file_discovery
         )
 
 
