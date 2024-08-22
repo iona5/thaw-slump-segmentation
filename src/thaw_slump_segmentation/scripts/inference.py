@@ -82,8 +82,24 @@ def flush_rio(filepath):
 
 
 def do_inference(
-    tilename, sources, model, dev, logger, name, data_dir, inference_dir, patch_size, margin_size, log_path=None
+    tilename, sources:DataSources, model:torch.nn.Module, dev, logger, name, data_dir:Path, inference_dir, patch_size, margin_size, log_path=None
 ):
+    """A wrapper around the actual inference, primarily aimed for a PLANET data setup.
+
+    Args:
+        tilename (str): The name of a folder in data_dir / "tiles" to process
+        sources (DataSources): A DataSources object defining the inputs, derived from a model config
+        model (torch.nn.Module): An inference model, conveniently created from models.create_model()
+        dev (torch.device): The torch.device() to run on
+        logger (logging.Logger): a logger to write info to
+        name (str): the subfolder in inference_dir to write results to, set to False if directly writing to inference_dir
+        data_dir (pathlib.Path): the base directory to read from
+        inference_dir (pathlib.Path): the base directory to write results to
+        patch_size (int): the size of the subtile to predict over
+        margin_size (int): how many pixel overlap the tiles are supposed to have
+        log_path (Path, optional): in case of preprocessing, log to this file for that stage. Defaults to None.
+    """
+
     tile_logger = get_logger(f'inference.{tilename}')
     # ===== PREPARE THE DATA =====
     DATA_ROOT = data_dir
