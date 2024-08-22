@@ -100,7 +100,6 @@ def do_inference(
         log_path (Path, optional): in case of preprocessing, log to this file for that stage. Defaults to None.
     """
 
-    tile_logger = get_logger(f'inference.{tilename}')
     # ===== PREPARE THE DATA =====
     DATA_ROOT = data_dir
     INFERENCE_ROOT = inference_dir
@@ -122,15 +121,75 @@ def do_inference(
     else:
         output_directory = INFERENCE_ROOT / tilename
 
+
+    tile_logger = get_logger(f'inference.{tilename}')
+
+    infere_dataset(
+        data_directory=data_directory,
+        sources=sources, 
+        model=model, 
+        dev=dev, 
+        output_directory=output_directory, 
+        patch_size=patch_size, 
+        margin_size=margin_size,
+        tile_logger=tile_logger)
+    
+
+def infere_dataset(data_directory:Path, sources:DataSources, 
+                         model:torch.nn.Module, dev:torch.device, 
+                         output_directory:Path, 
+                         patch_size, margin_size,
+                         tile_logger=None, 
+                         binary_threshold=0.5,
+                         sr_glob='*_SR.tif'):
+    """The actual inference function. Takes the input from `data_directory` which contains
+    the required datasets (surface_reflectance, ndvi, slope, elevation, tcvis) as GeoTIFF files,
+    applies the loaded RTS model on the selected torch device and writes the results as a set of 
+    files to `output_directory`.
+
+    `patch_size` and `margin_size` influence the tiling of the input data before passing it to the 
+    model. 
+    
+    The preprocessing stage of thaw-slump-segmentation generates the required data files for and 
+    existing surface reflectance data: 
+    * 'ndvi.tif'
+    * 'slope.tif'
+    * 'elevation.tif'
+    * 'tcvis.tif'
+
+    The detection of the actual surface reflectance data file in `data_directory` is based on 
+    `sr_glob` and can be adjusted to account for different naming schemes for the surface reflectance
+    file.
+
+    The primary result of the inference are the spatial probabilities, stored as 'pred_probability.tif'.
+    Using `binary_threshold`, RTS masks are derived from the probabilities stored as raster 
+    'pred_binarized.tif' and vector data (Shapefile 'pred_binarized.shp', 'pred_binarized.gpkg' GPKG).
+    
+    Additionally all input and output data is converted to JPEG and stored in `output_directory`.
+
+    Args:
+        data_directory (Path): The directory to read the preprocessed input data from
+        sources (DataSources): A list of data sources to process, corresponds to the 'data_sources' list in the models config.yml
+        model (torch.nn.Module): The RTS model
+        dev (torch.device): the torch device
+        output_directory (Path): the directory to write to
+        patch_size (int): patch size of the prediction tiling scheme
+        margin_size (int): tile overlap of the prediction tiling scheme
+        tile_logger (logging.Logger, optional): a logger to print info to
+        binary_threshold (int): the probability threshold for binarized RTS data
+        sr_glob (str, optional): a glob expression to match the surface reflectance files. Defaults to '*_SR.tif'.
+    """
     output_directory.mkdir(exist_ok=True, parents=True)
 
-    planet_imagery_path = next(data_directory.glob('*_SR.tif'))
+    surface_reflectance_file = next(data_directory.glob(sr_glob))
 
     data = []
     for source in sources:
-        tile_logger.debug(f'loading {source.name}')
+        if tile_logger is not None:
+            tile_logger.debug(f'loading {source.name}') 
+
         if source.name == 'planet':
-            tif_path = planet_imagery_path
+            tif_path = surface_reflectance_file
         else:
             tif_path = data_directory / f'{source.name}.tif'
 
@@ -184,7 +243,7 @@ def do_inference(
 
     res[nodata] = np.nan
     binarized = np.ones_like(res, dtype=np.uint8) * 255
-    binarized[~nodata] = (res[~nodata] > 0.5).astype(np.uint8)
+    binarized[~nodata] = (res[~nodata] > binary_threshold).astype(np.uint8)
 
     # define output file paths
     out_path_proba = output_directory / 'pred_probability.tif'
@@ -194,7 +253,7 @@ def do_inference(
     out_path_gpkg = output_directory / 'pred_binarized.gpkg'
 
     # Get the input profile
-    with rio.open(planet_imagery_path) as input_raster:
+    with rio.open(surface_reflectance_file) as input_raster:
         profile = input_raster.profile
         profile.update(
             dtype=rio.float32,
