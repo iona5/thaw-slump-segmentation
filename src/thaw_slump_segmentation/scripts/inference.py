@@ -80,6 +80,48 @@ def flush_rio(filepath):
     with rio.open(filepath) as _:
         pass
 
+def load_model_from_path(model_path, logger=None, ckpt="latest"):
+    
+    cuda = True if torch.cuda.is_available() else False
+    dev = torch.device('cpu') if not cuda else torch.device('cuda')
+    if logger is not None:
+        logger.info(f'Running on {dev} device')
+
+    model_dir = Path(model_path)
+    config = yaml.load((model_dir / 'config.yml').open(), Loader=yaml.SafeLoader)
+
+    m = config['model']
+    # print(m['architecture'],m['encoder'], m['input_channels'])
+    model = create_model(
+        arch=m['architecture'],
+        encoder_name=m['encoder'],
+        encoder_weights=None if m['encoder_weights'] == 'random' else m['encoder_weights'],
+        classes=1,
+        in_channels=m['input_channels'],
+    )
+    
+    if ckpt == 'latest':
+        ckpt_nums = [int(ckpt.stem) for ckpt in model_dir.glob('checkpoints/*.pt')]
+        last_ckpt = max(ckpt_nums)
+    else:
+        last_ckpt = int(ckpt)
+    ckpt = model_dir / 'checkpoints' / f'{last_ckpt:02d}.pt'
+    if logger is not None:
+        logger.info(f'Loading checkpoint {ckpt}')
+
+    # Parallelized Model needs to be declared before loading
+    try:
+        model.load_state_dict(torch.load(ckpt, map_location=dev))
+    except Exception:
+        model = nn.DataParallel(model)
+        model.load_state_dict(torch.load(ckpt, map_location=dev))
+
+    sources = DataSources(config['data_sources'])
+
+    model = model.to(dev)
+    torch.set_grad_enabled(False)
+
+    return model, sources, dev
 
 def do_inference(
     tilename, sources:DataSources, model:torch.nn.Module, dev, logger, name, data_dir:Path, inference_dir, patch_size, margin_size, log_path=None
@@ -345,11 +387,6 @@ def inference(
     init_logging(log_path)
     logger = get_logger('inference')
 
-    # ===== LOAD THE MODEL =====
-    cuda = True if torch.cuda.is_available() else False
-    dev = torch.device('cpu') if not cuda else torch.device('cuda')
-    logger.info(f'Running on {dev} device')
-
     if not model_path:
         last_modified = 0
         last_modeldir = None
@@ -361,39 +398,8 @@ def inference(
                 last_modeldir = config_file.parent
         model_path = last_modeldir
 
-    model_dir = Path(model_path)
-    config = yaml.load((model_dir / 'config.yml').open(), Loader=yaml.SafeLoader)
-
-    m = config['model']
-    # print(m['architecture'],m['encoder'], m['input_channels'])
-    model = create_model(
-        arch=m['architecture'],
-        encoder_name=m['encoder'],
-        encoder_weights=None if m['encoder_weights'] == 'random' else m['encoder_weights'],
-        classes=1,
-        in_channels=m['input_channels'],
-    )
-
-    if ckpt == 'latest':
-        ckpt_nums = [int(ckpt.stem) for ckpt in model_dir.glob('checkpoints/*.pt')]
-        last_ckpt = max(ckpt_nums)
-    else:
-        last_ckpt = int(ckpt)
-    ckpt = model_dir / 'checkpoints' / f'{last_ckpt:02d}.pt'
-    logger.info(f'Loading checkpoint {ckpt}')
-
-    # Parallelized Model needs to be declared before loading
-    try:
-        model.load_state_dict(torch.load(ckpt, map_location=dev))
-    except Exception:
-        model = nn.DataParallel(model)
-        model.load_state_dict(torch.load(ckpt, map_location=dev))
-
-    model = model.to(dev)
-
-    sources = DataSources(config['data_sources'])
-
-    torch.set_grad_enabled(False)
+    # ===== LOAD THE MODEL =====
+    model, sources, dev = load_model_from_path(model_path, logger, ckpt)
 
     for tilename in tqdm(tile_to_predict):
         do_inference(
