@@ -101,7 +101,7 @@ def load_model_from_path(model_path, logger=None, ckpt="latest"):
     )
     
     if ckpt == 'latest':
-        ckpt_nums = [int(ckpt.stem) for ckpt in model_dir.glob('checkpoints/*.pt')]
+        ckpt_nums = [int(ckpt.stem) for ckpt in model_dir.glob('checkpoints/*.pt') if ckpt.stem.isdigit()]
         last_ckpt = max(ckpt_nums)
     else:
         last_ckpt = int(ckpt)
