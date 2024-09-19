@@ -31,6 +31,9 @@ RASTERFILTER = '*_SR*.tif'
 VECTORFILTER = '*.shp'
 
 
+main = typer.Typer()
+
+
 def read_and_assert_imagedata(image_path):
     with rio.open(image_path) as raster:
         if raster.count <= 3:
@@ -272,6 +275,7 @@ def tile_size_callback(value: str):
     return x, y
 
 
+@main.command()
 def prepare_data(
     data_dir: Annotated[Path, typer.Option('--data_dir', help='Path to data processing dir')] = Path('data'),
     log_dir: Annotated[Path, typer.Option('--log_dir', help='Path to log dir')] = Path('logs'),
